@@ -1,0 +1,20 @@
+{
+  "physchem_cols": [
+    "MolWt",
+    "TPSA",
+    "MolLogP",
+    "NumHDonors",
+    "NumHAcceptors",
+    "NumRotatableBonds",
+    "RingCount",
+    "HeavyAtomCount",
+    "FractionCSP3",
+    "NumAromaticRings"
+  ],
+  "morgan": {
+    "radius": 2,
+    "n_bits": 2048,
+    "use_counts": false
+  },
+  "total_dim": 2058
+}

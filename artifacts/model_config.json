@@ -1,0 +1,18 @@
+{
+  "dataset": "cornelissen_bbb",
+  "split": "scaffold",
+  "model": "LGBM_ENSEMBLE5",
+  "seed": 2026,
+  "probability": "calibrated_isotonic",
+  "thresholds": "validation_selected",
+  "training_size": 1584,
+  "test_size": 341,
+  "timestamp": "2026-01-23T12:43:08.764665",
+  "ensemble_models": [
+    "ensemble_seed1.joblib",
+    "ensemble_seed2.joblib",
+    "ensemble_seed3.joblib",
+    "ensemble_seed4.joblib",
+    "ensemble_seed5.joblib"
+  ]
+}
