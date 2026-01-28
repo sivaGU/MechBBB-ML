@@ -1,0 +1,7 @@
+{
+  "mcc_max": 0.5715715715715716,
+  "balanced_accuracy_max": 0.5715715715715716,
+  "sens_90_spec_max": 0.5295295295295295,
+  "prob_type": "calibrated",
+  "source": "threshold_transfer_cornelissen_bbb_scaffold_test.csv"
+}
