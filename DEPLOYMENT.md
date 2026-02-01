@@ -1,4 +1,4 @@
-# MechBBB Deployment Guide
+# CalcBB Deployment Guide
 
 ## Streamlit Cloud
 

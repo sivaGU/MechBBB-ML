@@ -1,1 +1,1 @@
-# MechBBB package
+# CalcBB package

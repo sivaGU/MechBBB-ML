@@ -1,5 +1,5 @@
 """
-MechBBB Streamlit GUI. Two-stage mechanistically augmented BBB permeability classifier (Model C).
+CalcBB Streamlit GUI. Two-stage mechanistically augmented BBB permeability classifier (Model C).
 
 Run from this folder (project root):
   streamlit run streamlit_app.py
@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-# Ensure project root (this folder) is on path for src.mechbbb
+# Ensure project root (this folder) is on path for src.calcbb
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -20,7 +20,7 @@ import streamlit as st
 import pandas as pd
 from rdkit import Chem
 
-from src.mechbbb.predict import predict_single, predict_batch, load_predictor
+from src.calcbb.predict import predict_single, predict_batch, load_predictor
 
 
 def extract_smiles_from_file(file_content: bytes, file_extension: str) -> Optional[str]:
@@ -91,11 +91,11 @@ def extract_smiles_from_file(file_content: bytes, file_extension: str) -> Option
 # ============================================================================
 
 st.set_page_config(
-    page_title="MechBBB - BBB Permeability Studio",
+    page_title="CalcBB - BBB Permeability Studio",
     page_icon=None,
     layout="wide",
     menu_items={
-        "Report a bug": "https://github.com/your-org/mechbbb-gui/issues",
+        "Report a bug": "https://github.com/your-org/calcbb-gui/issues",
         "About": "Two-stage mechanistically augmented BBB permeability classifier (Model C).",
     },
 )
@@ -339,7 +339,7 @@ DEFAULT_THRESHOLD = 0.35
 
 def render_home_page():
     """Render the home/dashboard page."""
-    st.title("MechBBB - Blood-Brain Barrier Permeability Studio")
+    st.title("CalcBB - Blood-Brain Barrier Permeability Studio")
     st.caption(
         "Two-stage mechanistically augmented BBB permeability classifier (Model C)."
     )
@@ -359,7 +359,7 @@ def render_home_page():
         """
         ## Why this app exists
         Drug discovery teams struggle to predict whether small molecules cross the blood-brain barrier.
-        MechBBB (Model C) is a two-stage mechanistically augmented classifier that first predicts
+        CalcBB (Model C) is a two-stage mechanistically augmented classifier that first predicts
         auxiliary ADME properties (efflux, influx, PAMPA) and then combines them with physicochemical
         and fingerprint features to predict BBB permeability. This approach improves both
         external generalization and interpretability.
@@ -397,12 +397,12 @@ def render_home_page():
 def render_documentation_page():
     """Render the documentation page."""
     st.title("Documentation & Runbook")
-    st.caption("Reference material for the MechBBB Model C classifier.")
+    st.caption("Reference material for the CalcBB Model C classifier.")
 
     st.markdown(
         """
         ## Purpose
-        This application provides a Streamlit interface for the MechBBB two-stage mechanistically augmented
+        This application provides a Streamlit interface for the CalcBB two-stage mechanistically augmented
         BBB permeability classifier (Model C). It supports single SMILES input, structure file upload (SDF, MOL, PDB, PDBQT, MOL2), and batch CSV processing.
         """
     )
@@ -414,7 +414,7 @@ def render_documentation_page():
         .
         ├── streamlit_app.py       # Main application
         ├── requirements.txt      # Dependencies
-        ├── src/mechbbb/          # Prediction module
+        ├── src/calcbb/           # Prediction module
         │   ├── predict.py        # predict_single, predict_batch, load_predictor
         │   └── cli.py            # Command-line interface
         └── artifacts/            # Model artifacts
@@ -451,8 +451,8 @@ def render_documentation_page():
         ## CLI usage
         From the project folder:
         ```bash
-        python -m src.mechbbb.cli --smiles "CCO" "c1ccccc1" --output out.csv
-        python -m src.mechbbb.cli --input example_inputs.csv --output out.csv
+        python -m src.calcbb.cli --smiles "CCO" "c1ccccc1" --output out.csv
+        python -m src.calcbb.cli --input example_inputs.csv --output out.csv
         ```
         Output columns: smiles, canonical_smiles, prob_BBB+, BBB_class, p_efflux, p_influx, p_pampa, threshold, error.
         """
@@ -462,11 +462,11 @@ def render_documentation_page():
 
 
 def render_calcbb_prediction_page():
-    """Render the CalcBB / MechBBB prediction page."""
+    """Render the CalcBB prediction page."""
     st.title("BBB Permeability Prediction")
     st.markdown(
         """
-        Predict BBB permeability using MechBBB (Model C). Enter a SMILES string, upload a structure file (SDF, MOL, PDB, PDBQT, MOL2), or upload a CSV file for batch processing.
+        Predict BBB permeability using CalcBB (Model C). Enter a SMILES string, upload a structure file (SDF, MOL, PDB, PDBQT, MOL2), or upload a CSV file for batch processing.
         The model outputs P(BBB+), mechanistic probabilities (p_efflux, p_influx, p_pampa), and classification.
         
         **Input modes:** Single SMILES or structure file | Batch (CSV with smiles/SMILES column)
@@ -490,7 +490,7 @@ def render_calcbb_prediction_page():
         "Classification threshold", 0.0, 1.0, DEFAULT_THRESHOLD, 0.01
     )
     st.sidebar.info(
-        "**MechBBB (Model C)** Default threshold 0.35 = MCC-optimal on BBBP validation."
+        "**CalcBB (Model C)** Default threshold 0.35 = MCC-optimal on BBBP validation."
     )
 
     st.divider()
@@ -598,7 +598,7 @@ def render_calcbb_prediction_page():
                     st.download_button(
                         "Download CSV",
                         df_out.to_csv(index=False),
-                        "mechbbb_predictions.csv",
+                        "calcbb_predictions.csv",
                         "text/csv",
                         key="download_csv",
                     )
@@ -607,7 +607,7 @@ def render_calcbb_prediction_page():
 
     st.divider()
     st.caption(
-        "MechBBB (Model C). Stage-1: efflux/influx/PAMPA. Stage-2: PhysChem+ECFP+mech."
+        "CalcBB (Model C). Stage-1: efflux/influx/PAMPA. Stage-2: PhysChem+ECFP+mech."
     )
 
 

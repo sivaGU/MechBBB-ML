@@ -1,8 +1,6 @@
-# MechBBB — Two-Stage Mechanistically Augmented BBB Permeability Classifier (Model C)
+# CalcBB - Two-Stage Mechanistically Augmented BBB Permeability Classifier (Model C)
 
-A production-ready Streamlit GUI for predicting Blood-Brain Barrier (BBB) permeability using the validated **MechBBB Model C** two-stage ensemble.
-
-Link: https://calcbb-gui-qtigrtpgscgcemdhxdb75t.streamlit.app/
+A production-ready Streamlit GUI for predicting Blood-Brain Barrier (BBB) permeability using the validated **CalcBB Model C** two-stage ensemble.
 
 ## Features
 
@@ -46,10 +44,10 @@ The app will open at `http://localhost:8501`.
 
 ```
 .
-├── streamlit_app.py       # MechBBB GUI
+├── streamlit_app.py       # CalcBB GUI
 ├── requirements.txt       # Dependencies
 ├── src/
-│   └── mechbbb/           # Prediction module
+│   └── calcbb/            # Prediction module
 │       ├── predict.py     # predict_single, predict_batch, load_predictor
 │       └── cli.py         # Command-line interface
 ├── artifacts/             # Model artifacts
@@ -77,10 +75,10 @@ From the project root:
 
 ```bash
 # Predict a few SMILES
-python -m src.mechbbb.cli --smiles "CCO" "c1ccccc1" --output out.csv
+python -m src.calcbb.cli --smiles "CCO" "c1ccccc1" --output out.csv
 
 # Predict from CSV
-python -m src.mechbbb.cli --input example_inputs.csv --output out.csv
+python -m src.calcbb.cli --input example_inputs.csv --output out.csv
 ```
 
 ## Model Details
@@ -97,4 +95,3 @@ python -m src.mechbbb.cli --input example_inputs.csv --output out.csv
 ## Contact
 
 Dr. Sivanesan Dakshanamurthy — sd233@georgetown.edu
-
