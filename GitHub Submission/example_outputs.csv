@@ -1,4 +1,0 @@
-smiles,canonical_smiles,prob_BBB+,label,BBB_class,p_efflux,p_influx,p_pampa,threshold,error
-CCO,CCO,0.958710,1,BBB+,0.335354,0.221114,0.519795,0.35,
-c1ccccc1,c1ccccc1,0.898508,1,BBB+,0.288658,0.236816,0.539539,0.35,
-CC(=O)Oc1ccccc1C(=O)O,CC(=O)Oc1ccccc1C(=O)O,0.769239,1,BBB+,0.058403,0.042478,0.510439,0.35,
