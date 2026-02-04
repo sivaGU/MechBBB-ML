@@ -137,50 +137,22 @@ def get_mol_with_3d(smiles: str, file_content: Optional[bytes] = None, file_exte
     return mol
 
 
-def render_ligand_3d_static(mol, size: int = 500) -> Optional[bytes]:
+def render_ligand_structure(mol, size: int = 400) -> Optional[bytes]:
     """
-    Draw a simple static 3D image of the ligand using matplotlib (RDKit + matplotlib only).
+    Draw the ligand as a 2D chemical structure (atoms and bonds) using RDKit.
     Returns PNG image bytes or None on failure.
     """
+    if mol is None:
+        return None
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
-    except ImportError:
+        from rdkit.Chem import Draw
+        img = Draw.MolToImage(mol, size=(size, size))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf.getvalue()
+    except Exception:
         return None
-    if mol is None or mol.GetNumConformers() == 0:
-        return None
-    conf = mol.GetConformer()
-    xs, ys, zs = [], [], []
-    for i in range(mol.GetNumAtoms()):
-        p = conf.GetAtomPosition(i)
-        xs.append(p.x)
-        ys.append(p.y)
-        zs.append(p.z)
-    fig = plt.figure(figsize=(6, 5))
-    ax = fig.add_subplot(111, projection="3d")
-    ax.scatter(xs, ys, zs, c="#1E7A8C", s=80, alpha=0.9)
-    for bond in mol.GetBonds():
-        i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        ax.plot(
-            [xs[i], xs[j]], [ys[i], ys[j]], [zs[i], zs[j]],
-            c="#4DB8D0", linewidth=2, alpha=0.8
-        )
-    ax.set_facecolor("white")
-    ax.xaxis.pane.fill = False
-    ax.yaxis.pane.fill = False
-    ax.zaxis.pane.fill = False
-    ax.grid(False)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-    plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=100, bbox_inches="tight", facecolor="white")
-    plt.close(fig)
-    buf.seek(0)
-    return buf.getvalue()
 
 
 # ============================================================================
@@ -698,20 +670,20 @@ def render_mechbbb_prediction_page():
                     with mcol3:
                         st.metric("p_pampa", f"{result.p_pampa:.4f}")
 
-                    # Static 3D ligand image
-                    st.subheader("3D Ligand Structure")
+                    # Ligand structure (2D chemical drawing)
+                    st.subheader("Ligand Structure")
                     file_content = st.session_state.get("structure_file_content")
                     file_ext = st.session_state.get("structure_file_ext")
-                    mol_3d = get_mol_with_3d(
+                    mol = get_mol_with_3d(
                         result.canonical_smiles,
                         file_content=file_content,
                         file_extension=file_ext,
                     )
-                    img_bytes = render_ligand_3d_static(mol_3d) if mol_3d else None
+                    img_bytes = render_ligand_structure(mol) if mol else None
                     if img_bytes:
-                        st.image(img_bytes, use_container_width=False, width=500)
+                        st.image(img_bytes, use_container_width=False, width=400)
                     else:
-                        st.warning("Could not generate 3D structure for this molecule.")
+                        st.warning("Could not draw structure for this molecule.")
                 else:
                     st.error(result.error)
             else:
