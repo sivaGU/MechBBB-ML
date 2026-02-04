@@ -16,20 +16,13 @@ if str(PROJECT_ROOT) not in sys.path:
 
 HANDOFF_DIR = PROJECT_ROOT
 
+import io
 import streamlit as st
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from src.mechbbb.predict import predict_single, predict_batch, load_predictor
-
-# Optional 3D viewer (stmol/py3Dmol)
-try:
-    import py3Dmol
-    from stmol import showmol
-    HAS_3D_VIEWER = True
-except ImportError:
-    HAS_3D_VIEWER = False
 
 
 def extract_smiles_from_file(file_content: bytes, file_extension: str) -> Optional[str]:
@@ -96,12 +89,11 @@ def extract_smiles_from_file(file_content: bytes, file_extension: str) -> Option
     return None
 
 
-def get_3d_structure_for_viewer(smiles: str, file_content: Optional[bytes] = None, file_extension: Optional[str] = None) -> Optional[str]:
+def get_mol_with_3d(smiles: str, file_content: Optional[bytes] = None, file_extension: Optional[str] = None):
     """
-    Get a 3D structure as PDB string for visualization.
-    If file_content is provided and contains 3D coordinates (SDF, MOL, PDB, etc.), use it.
-    Otherwise generate 3D from SMILES using RDKit (EmbedMolecule + MMFF).
-    Returns PDB block string or None if generation fails.
+    Get an RDKit mol with 3D coordinates for visualization.
+    Uses uploaded file coords if present, else generates 3D from SMILES.
+    Returns Chem.Mol or None.
     """
     mol = None
     if file_content is not None and file_extension is not None:
@@ -125,7 +117,6 @@ def get_3d_structure_for_viewer(smiles: str, file_content: Optional[bytes] = Non
             elif ext == ".mol2":
                 mol = Chem.MolFromMol2Block(text)
             if mol is not None and mol.GetNumConformers() == 0:
-                # No 3D coords; get SMILES and fall through to embedding
                 smiles = Chem.MolToSmiles(mol, canonical=True)
                 mol = None
         except Exception:
@@ -134,7 +125,6 @@ def get_3d_structure_for_viewer(smiles: str, file_content: Optional[bytes] = Non
         mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return None
-    # Ensure we have 3D coordinates
     if mol.GetNumConformers() == 0:
         try:
             AllChem.EmbedMolecule(mol, AllChem.ETKDG())
@@ -144,22 +134,53 @@ def get_3d_structure_for_viewer(smiles: str, file_content: Optional[bytes] = Non
                 AllChem.EmbedMolecule(mol, randomSeed=42)
             except Exception:
                 return None
+    return mol
+
+
+def render_ligand_3d_static(mol, size: int = 500) -> Optional[bytes]:
+    """
+    Draw a simple static 3D image of the ligand using matplotlib (RDKit + matplotlib only).
+    Returns PNG image bytes or None on failure.
+    """
     try:
-        return Chem.MolToPDBBlock(mol)
-    except Exception:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+    except ImportError:
         return None
-
-
-def render_ligand_3d(pdb_block: str, height: int = 500, width: int = 600) -> None:
-    """Render an interactive 3D view of the ligand using py3Dmol and stmol."""
-    if not HAS_3D_VIEWER or not pdb_block:
-        return
-    view = py3Dmol.view(width=width, height=height)
-    view.addModel(pdb_block, "pdb")
-    view.setStyle({"stick": {"colorscheme": "lightgreyCarbon"}, "sphere": {"scale": 0.3}})
-    view.setBackgroundColor("white")
-    view.zoomTo()
-    showmol(view, height=height, width=width)
+    if mol is None or mol.GetNumConformers() == 0:
+        return None
+    conf = mol.GetConformer()
+    xs, ys, zs = [], [], []
+    for i in range(mol.GetNumAtoms()):
+        p = conf.GetAtomPosition(i)
+        xs.append(p.x)
+        ys.append(p.y)
+        zs.append(p.z)
+    fig = plt.figure(figsize=(6, 5))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.scatter(xs, ys, zs, c="#1E7A8C", s=80, alpha=0.9)
+    for bond in mol.GetBonds():
+        i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        ax.plot(
+            [xs[i], xs[j]], [ys[i], ys[j]], [zs[i], zs[j]],
+            c="#4DB8D0", linewidth=2, alpha=0.8
+        )
+    ax.set_facecolor("white")
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+    ax.grid(False)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+    plt.tight_layout()
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=100, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
 
 
 # ============================================================================
@@ -677,20 +698,18 @@ def render_mechbbb_prediction_page():
                     with mcol3:
                         st.metric("p_pampa", f"{result.p_pampa:.4f}")
 
-                    # 3D ligand visualization
+                    # Static 3D ligand image
                     st.subheader("3D Ligand Structure")
                     file_content = st.session_state.get("structure_file_content")
                     file_ext = st.session_state.get("structure_file_ext")
-                    pdb_block = get_3d_structure_for_viewer(
+                    mol_3d = get_mol_with_3d(
                         result.canonical_smiles,
                         file_content=file_content,
                         file_extension=file_ext,
                     )
-                    if pdb_block and HAS_3D_VIEWER:
-                        st.caption("Interactive 3D view of the predicted ligand. Rotate with mouse drag, scroll to zoom.")
-                        render_ligand_3d(pdb_block, height=500, width=700)
-                    elif not HAS_3D_VIEWER:
-                        st.info("Install `stmol` and `py3Dmol` for 3D visualization: `pip install stmol py3Dmol`")
+                    img_bytes = render_ligand_3d_static(mol_3d) if mol_3d else None
+                    if img_bytes:
+                        st.image(img_bytes, use_container_width=False, width=500)
                     else:
                         st.warning("Could not generate 3D structure for this molecule.")
                 else:
