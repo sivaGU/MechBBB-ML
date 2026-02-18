@@ -2,7 +2,7 @@
 
 A production-ready Streamlit GUI for predicting Blood-Brain Barrier (BBB) permeability using the validated **MechBBB-ML Model C** two-stage ensemble.
 
-Link: https://mechbbb-gui-2ts5qorwtoyhv54wp4jpxg.streamlit.app/
+Link: https://mechbbb-ml-o9wxapakrhkh8ap3ypivef.streamlit.app/
 
 ## Features
 
@@ -97,6 +97,7 @@ python -m src.mechbbb.cli --input example_inputs.csv --output out.csv
 ## Contact
 
 Dr. Sivanesan Dakshanamurthy — sd233@georgetown.edu
+
 
 
 
