@@ -21,10 +21,12 @@ import urllib.request
 import urllib.parse
 import streamlit as st
 import pandas as pd
+import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from src.mechbbb.predict import predict_single, predict_batch, load_predictor
+from similarity_module import compute_similarity, similarity_flag, compute_morgan
 
 
 def extract_smiles_from_file(file_content: bytes, file_extension: str) -> Optional[str]:
@@ -465,6 +467,38 @@ st.markdown("""
 def get_predictor():
     return load_predictor(HANDOFF_DIR)
 
+
+@st.cache_resource
+def get_train_fps():
+    """Load training fingerprints for similarity computation."""
+    train_fps_path = HANDOFF_DIR / "artifacts" / "train_fps.npz"
+    if not train_fps_path.exists():
+        # Try alternative location
+        train_fps_path = HANDOFF_DIR / "train_fps.npz"
+    if train_fps_path.exists():
+        return np.load(train_fps_path)["fp"]
+    return None
+
+
+def compute_ecfp4_fingerprint(smiles: str) -> Optional[np.ndarray]:
+    """
+    Compute ECFP4 fingerprint (Morgan radius=2, n_bits=2048) for a single SMILES.
+    Returns 1D array of shape (2048,) with dtype uint8 (0/1), or None if invalid.
+    """
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return None
+        fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
+        arr = np.zeros(2048, dtype=np.uint8)
+        for j in range(2048):
+            if fp.GetBit(j):
+                arr[j] = 1
+        return arr
+    except Exception:
+        return None
+
+
 DEFAULT_THRESHOLD = 0.35
 
 # ============================================================================
@@ -551,7 +585,9 @@ def render_documentation_page():
         ├── src/mechbbb/          # Prediction module
         │   ├── predict.py        # predict_single, predict_batch, load_predictor
         │   └── cli.py            # Command-line interface
+        ├── similarity_module.py  # ECFP4 Tanimoto similarity computation
         └── artifacts/            # Model artifacts
+            └── train_fps.npz      # Training fingerprints (for applicability domain warnings)
             ├── stage1_efflux.joblib, stage1_influx.joblib, stage1_pampa.joblib
             ├── stage2_modelC/    # model_seed0.pkl through model_seed4.pkl
             ├── threshold.json
@@ -598,7 +634,9 @@ def render_documentation_page():
         python -m src.mechbbb.cli --smiles "CCO" "c1ccccc1" --output out.csv
         python -m src.mechbbb.cli --input example_inputs.csv --output out.csv
         ```
-        Output columns: smiles, canonical_smiles, prob_BBB+, prob_std_error, prob_std_error_pct, prob_CI_lower, prob_CI_upper, BBB_class, p_efflux, p_influx, p_pampa, threshold, error.
+        Output columns: smiles, canonical_smiles, prob_BBB+, prob_std_error, prob_std_error_pct, prob_CI_lower, prob_CI_upper, BBB_class, p_efflux, p_influx, p_pampa, threshold, error, max_similarity, similarity_flag.
+        
+        **Applicability Domain Warning:** The GUI computes the maximum ECFP4 Tanimoto similarity between each query molecule and the BBBP training set fingerprints. A warning is displayed when the maximum similarity is below 0.30, indicating limited similarity to the training chemistry under this fingerprint metric. This requires `artifacts/train_fps.npz` to be present (see artifact_requirements.md for how to generate it).
         """
     )
 
@@ -625,7 +663,8 @@ def render_mechbbb_prediction_page():
             "Ensure the **artifacts/** folder contains:\n"
             "- stage1_efflux.joblib, stage1_influx.joblib, stage1_pampa.joblib\n"
             "- stage2_modelC/ with model_seed0.pkl through model_seed4.pkl\n"
-            "- threshold.json"
+            "- threshold.json\n"
+            "- train_fps.npz (for applicability domain warnings; see artifact_requirements.md)"
         )
         return
 
@@ -735,6 +774,32 @@ def render_mechbbb_prediction_page():
                     with mcol3:
                         st.metric("p_pampa", f"{result.p_pampa:.4f}")
 
+                    # Applicability domain: ECFP4 Tanimoto similarity to training set
+                    train_fps = get_train_fps()
+                    if train_fps is not None:
+                        query_fp = compute_ecfp4_fingerprint(result.canonical_smiles)
+                        if query_fp is not None:
+                            max_similarity = compute_similarity(query_fp, train_fps)
+                            sim_flag = similarity_flag(max_similarity)
+                            
+                            st.subheader("Applicability Domain")
+                            simcol1, simcol2 = st.columns(2)
+                            with simcol1:
+                                st.metric("Max Similarity (ECFP4 Tanimoto)", f"{max_similarity:.4f}")
+                            with simcol2:
+                                st.metric("Similarity Flag", sim_flag)
+                            
+                            # Show warning if similarity is low
+                            if sim_flag == "low":
+                                st.warning(
+                                    "⚠️ **Low similarity to training set** (similarity < 0.3). "
+                                    "Predictions may be unreliable for this molecule."
+                                )
+                        else:
+                            st.info("Could not compute fingerprint for similarity analysis.")
+                    else:
+                        st.info("Training fingerprints not available. Similarity analysis disabled.")
+
                     # Ligand structure: fetch 2D image from database (CACTUS), fallback to RDKit
                     st.subheader("Ligand Structure")
                     smiles_for_lookup = (result.canonical_smiles or result.smiles or "").strip()
@@ -818,6 +883,40 @@ def render_mechbbb_prediction_page():
                     df_out["p_efflux"] = [r.p_efflux for r in results]
                     df_out["p_influx"] = [r.p_influx for r in results]
                     df_out["p_pampa"] = [r.p_pampa for r in results]
+
+                    # Compute similarity for each result
+                    train_fps = get_train_fps()
+                    if train_fps is not None:
+                        max_similarities = []
+                        similarity_flags = []
+                        for r in results:
+                            if r.is_valid and r.canonical_smiles:
+                                query_fp = compute_ecfp4_fingerprint(r.canonical_smiles)
+                                if query_fp is not None:
+                                    max_sim = compute_similarity(query_fp, train_fps)
+                                    max_similarities.append(max_sim)
+                                    similarity_flags.append(similarity_flag(max_sim))
+                                else:
+                                    max_similarities.append(None)
+                                    similarity_flags.append("")
+                            else:
+                                max_similarities.append(None)
+                                similarity_flags.append("")
+                        
+                        df_out["max_similarity"] = [
+                            f"{s:.4f}" if s is not None else "" for s in max_similarities
+                        ]
+                        df_out["similarity_flag"] = similarity_flags
+                        
+                        # Show summary warning if any molecules have low similarity
+                        low_sim_count = sum(1 for flag in similarity_flags if flag == "low")
+                        if low_sim_count > 0:
+                            st.warning(
+                                f"⚠️ **{low_sim_count} molecule(s) have low similarity to training set** "
+                                "(similarity < 0.3). Predictions may be unreliable."
+                            )
+                    else:
+                        st.info("Training fingerprints not available. Similarity analysis disabled.")
 
                     st.subheader("Results")
                     st.dataframe(df_out, use_container_width=True)
