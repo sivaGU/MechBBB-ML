@@ -24,6 +24,8 @@ import pandas as pd
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit.Chem import rdDepictor
+from rdkit.Chem.Draw import rdMolDraw2D
 
 from src.mechbbb.predict import predict_single, predict_batch, load_predictor
 from similarity_module import compute_similarity, similarity_flag, compute_morgan
@@ -205,20 +207,36 @@ def render_ligand_structure(mol, size: int = 400) -> Optional[bytes]:
     if mol is None:
         return None
     try:
-        from rdkit.Chem import Draw
+        mol_to_draw = Chem.Mol(mol)
+
+        # Force high-quality 2D coordinates for consistent, clean depictions.
         try:
-            AllChem.Compute2DCoords(mol)
+            rdDepictor.SetPreferCoordGen(True)
+            if mol_to_draw.GetNumConformers() > 0:
+                mol_to_draw.RemoveAllConformers()
+            rdDepictor.Compute2DCoords(mol_to_draw)
         except Exception:
             pass
-        img = Draw.MolToImage(mol, size=(size, size))
-        if img is None:
-            return None
-        buf = io.BytesIO()
-        if hasattr(img, "mode") and img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-        img.save(buf, format="PNG")
-        buf.seek(0)
-        return buf.getvalue()
+
+        try:
+            Chem.Kekulize(mol_to_draw, clearAromaticFlags=False)
+        except Exception:
+            # Some molecules cannot be kekulized; continue with aromatic form.
+            pass
+
+        drawer = rdMolDraw2D.MolDraw2DCairo(size, size)
+        draw_options = drawer.drawOptions()
+        draw_options.padding = 0.05
+        draw_options.bondLineWidth = 2.0
+        draw_options.fixedBondLength = 28
+        draw_options.minFontSize = 14
+        draw_options.maxFontSize = 32
+        draw_options.addStereoAnnotation = False
+
+        rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol_to_draw)
+        drawer.FinishDrawing()
+        png_bytes = drawer.GetDrawingText()
+        return bytes(png_bytes) if png_bytes else None
     except Exception:
         return None
 
@@ -801,26 +819,22 @@ def render_mechbbb_prediction_page():
                     else:
                         st.info("Training fingerprints not available. Similarity analysis disabled.")
 
-                    # Ligand structure: fetch 2D image from database (CACTUS), fallback to RDKit
+                    # Ligand structure: always render with RDKit for a consistent, clean style.
                     st.subheader("Ligand Structure")
                     smiles_for_lookup = (result.canonical_smiles or result.smiles or "").strip()
-                    img_bytes = fetch_structure_image_from_database(smiles_for_lookup) if smiles_for_lookup else None
-                    source_label = "NCI CACTUS Chemical Structure Resolver"
-                    if img_bytes is None:
-                        file_content = st.session_state.get("structure_file_content")
-                        file_ext = st.session_state.get("structure_file_ext")
-                        mol = get_mol_for_drawing(
-                            smiles_for_lookup if smiles_for_lookup else None,
-                            file_content=file_content,
-                            file_extension=file_ext,
-                        )
-                        img_bytes = render_ligand_structure(mol) if mol else None
-                        source_label = "RDKit (database lookup unavailable)"
+                    file_content = st.session_state.get("structure_file_content")
+                    file_ext = st.session_state.get("structure_file_ext")
+                    mol = get_mol_for_drawing(
+                        smiles_for_lookup if smiles_for_lookup else None,
+                        file_content=file_content,
+                        file_extension=file_ext,
+                    )
+                    img_bytes = render_ligand_structure(mol) if mol else None
                     if img_bytes:
                         st.session_state.last_ligand_image = img_bytes
                         st.session_state.last_ligand_smiles = result.canonical_smiles
                         st.image(io.BytesIO(img_bytes), use_container_width=False, width=400)
-                        st.caption(f"2D structure · Source: {source_label}")
+                        st.caption("2D structure · RDKit clean depiction")
                     else:
                         st.warning(
                             "Could not retrieve or draw structure for this molecule."
