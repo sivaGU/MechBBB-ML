@@ -283,31 +283,31 @@ st.markdown("""
     .result-panel {
         border: 1px solid #d8ebef;
         border-radius: 10px;
-        padding: 0.95rem 1rem;
+        padding: 0.75rem 0.9rem;
         background: linear-gradient(180deg, #ffffff 0%, #f8fdff 100%);
-        margin-bottom: 0.8rem;
+        margin-bottom: 0.55rem;
     }
     
     .result-title {
-        font-size: 0.88rem;
+        font-size: 0.85rem;
         font-weight: 700;
         color: #1E7A8C;
         letter-spacing: 0.02em;
         text-transform: uppercase;
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.22rem;
     }
     
     .result-value {
-        font-size: 1.7rem;
+        font-size: 1.48rem;
         font-weight: 800;
         color: #0D4F5C;
-        line-height: 1.15;
+        line-height: 1.12;
     }
     
     .result-subtext {
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         color: #4c5f64;
-        margin-top: 0.28rem;
+        margin-top: 0.18rem;
     }
     
     .ligand-panel {
@@ -373,6 +373,17 @@ st.markdown("""
         font-weight: 700;
     }
     
+    /* Slightly tighter section spacing (prediction-style subheaders) */
+    .main h3 {
+        margin-top: 0.65rem !important;
+        margin-bottom: 0.35rem !important;
+    }
+    
+    .main h4 {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.3rem !important;
+    }
+    
     a {
         color: #1E7A8C;
         text-decoration: none;
@@ -386,6 +397,25 @@ st.markdown("""
     [data-testid="stMetricValue"] {
         color: #1E7A8C;
         font-weight: 600;
+        font-size: 1.42rem !important;
+        line-height: 1.2 !important;
+    }
+    
+    /* Tighten label → value gap in metrics */
+    [data-testid="stMetric"] label p {
+        margin-bottom: 0.1rem !important;
+    }
+    
+    /* Progress bars sit closer to the value above */
+    [data-testid="stProgress"] {
+        margin-top: 0.2rem !important;
+        margin-bottom: 0.35rem !important;
+    }
+    
+    /* Prediction summary info box: slightly less vertical padding */
+    .main [data-baseweb="notification"] {
+        padding-top: 0.55rem !important;
+        padding-bottom: 0.55rem !important;
     }
     
     .stSuccess {
