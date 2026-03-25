@@ -310,14 +310,6 @@ st.markdown("""
         margin-top: 0.18rem;
     }
     
-    .ligand-panel {
-        border: 1px solid #d4e6eb;
-        border-radius: 10px;
-        padding: 0.75rem;
-        background: #fcfeff;
-        margin-bottom: 0.8rem;
-    }
-    
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #0D4F5C 0%, #0A3D47 100%);
         color: #ffffff;
@@ -734,7 +726,6 @@ def render_mechbbb_prediction_page():
     preview_smiles = st.session_state.get("last_ligand_smiles")
     if preview_img:
         with ligand_preview_slot.container():
-            st.markdown('<div class="ligand-panel">', unsafe_allow_html=True)
             _, preview_col, _ = st.columns([0.25, 1, 0.25])
             with preview_col:
                 st.image(io.BytesIO(preview_img), use_container_width=True)
@@ -742,7 +733,6 @@ def render_mechbbb_prediction_page():
                     "Latest ligand preview"
                     + (f" · SMILES: `{preview_smiles}`" if preview_smiles else "")
                 )
-            st.markdown("</div>", unsafe_allow_html=True)
     else:
         ligand_preview_slot.info("Ligand preview will appear here after a valid single-molecule prediction.")
 
@@ -922,22 +912,23 @@ def render_mechbbb_prediction_page():
                         file_extension=file_ext,
                     )
                     img_bytes = render_ligand_structure(mol) if mol else None
-                    source_label = "RDKit clean depiction"
                     if img_bytes is None and smiles_for_lookup:
                         img_bytes = fetch_structure_image_from_database(smiles_for_lookup)
-                        source_label = "NCI CACTUS fallback"
                     if img_bytes:
                         st.session_state.last_ligand_image = img_bytes
                         st.session_state.last_ligand_smiles = result.canonical_smiles
                         with ligand_preview_slot.container():
-                            st.markdown('<div class="ligand-panel">', unsafe_allow_html=True)
                             _, preview_col, _ = st.columns([0.25, 1, 0.25])
                             with preview_col:
                                 st.image(io.BytesIO(img_bytes), use_container_width=True)
                                 st.caption(
-                                    f"Ligand depiction ({source_label}) · SMILES: `{result.canonical_smiles}`"
+                                    "Latest ligand preview"
+                                    + (
+                                        f" · SMILES: `{result.canonical_smiles}`"
+                                        if result.canonical_smiles
+                                        else ""
+                                    )
                                 )
-                            st.markdown("</div>", unsafe_allow_html=True)
                     else:
                         st.warning(
                             "Could not retrieve or draw structure for this molecule."
