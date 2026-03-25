@@ -881,8 +881,6 @@ def render_mechbbb_prediction_page():
                                 )
                         else:
                             st.info("Could not compute fingerprint for similarity analysis.")
-                    else:
-                        st.info("Training fingerprints not available. Similarity analysis disabled.")
 
                     # Ligand structure preview is shown above the input controls.
                     smiles_for_lookup = (result.canonical_smiles or result.smiles or "").strip()
@@ -1005,8 +1003,6 @@ def render_mechbbb_prediction_page():
                                 f"⚠️ **{low_sim_count} molecule(s) have low similarity to training set** "
                                 "(similarity < 0.3). Predictions may be unreliable."
                             )
-                    else:
-                        st.info("Training fingerprints not available. Similarity analysis disabled.")
 
                     st.subheader("Results")
                     st.dataframe(df_out, use_container_width=True)
@@ -1023,9 +1019,6 @@ def render_mechbbb_prediction_page():
             st.info("Upload a CSV file with a SMILES column to run batch predictions.")
 
     st.divider()
-    st.caption(
-        "MechBBB-ML (Model C). Stage-1: efflux/influx/PAMPA. Stage-2: PhysChem+ECFP+mech."
-    )
 
 
 def render_demo_prediction_page():
