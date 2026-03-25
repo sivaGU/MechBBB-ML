@@ -24,6 +24,7 @@ import pandas as pd
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit.Chem.Draw import rdMolDraw2D
 
 from src.mechbbb.predict import predict_single, predict_batch, load_predictor
 from similarity_module import compute_similarity, similarity_flag, compute_morgan
@@ -204,12 +205,27 @@ def render_ligand_structure(mol, size: int = 400) -> Optional[bytes]:
     """
     if mol is None:
         return None
-    # Streamlit Cloud images rely on system libs (e.g., libXrender) for RDKit
-    # drawing in some environments. Avoid hard dependency here and use
-    # external image fallback in the caller when this returns None.
-    _ = mol
-    _ = size
-    return None
+    try:
+        draw_size = max(300, int(size))
+        drawer = rdMolDraw2D.MolDraw2DCairo(draw_size, int(draw_size * 0.78))
+        opts = drawer.drawOptions()
+        opts.bondLineWidth = 3.0
+        opts.padding = 0.02
+        opts.baseFontSize = 0.95
+        opts.minFontSize = 14
+        opts.maxFontSize = 30
+        opts.clearBackground = True
+
+        draw_mol = Chem.Mol(mol)
+        if draw_mol.GetNumConformers() > 0:
+            draw_mol.RemoveAllConformers()
+        AllChem.Compute2DCoords(draw_mol)
+
+        rdMolDraw2D.PrepareAndDrawMolecule(drawer, draw_mol)
+        drawer.FinishDrawing()
+        return bytes(drawer.GetDrawingText())
+    except Exception:
+        return None
 
 
 # ============================================================================
@@ -257,11 +273,49 @@ st.markdown("""
     .main .block-container,
     section.main .block-container {
         background-color: #ffffff !important;
-        padding: 2rem 3rem;
-        margin: 2rem auto;
+        padding: 1.2rem 1.8rem;
+        margin: 0.8rem auto;
         max-width: 1400px;
         border-radius: 8px;
         box-shadow: 0 2px 12px rgba(13, 79, 92, 0.08);
+    }
+    
+    .result-panel {
+        border: 1px solid #d8ebef;
+        border-radius: 10px;
+        padding: 0.95rem 1rem;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fdff 100%);
+        margin-bottom: 0.8rem;
+    }
+    
+    .result-title {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: #1E7A8C;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        margin-bottom: 0.35rem;
+    }
+    
+    .result-value {
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: #0D4F5C;
+        line-height: 1.15;
+    }
+    
+    .result-subtext {
+        font-size: 0.85rem;
+        color: #4c5f64;
+        margin-top: 0.28rem;
+    }
+    
+    .ligand-panel {
+        border: 1px solid #d4e6eb;
+        border-radius: 10px;
+        padding: 0.75rem;
+        background: #fcfeff;
+        margin-bottom: 0.8rem;
     }
     
     [data-testid="stSidebar"] {
@@ -645,18 +699,22 @@ def render_mechbbb_prediction_page():
         """
     )
     st.subheader("Ligand Structure")
+    ligand_preview_slot = st.empty()
     preview_img = st.session_state.get("last_ligand_image")
     preview_smiles = st.session_state.get("last_ligand_smiles")
     if preview_img:
-        _, preview_col, _ = st.columns([1, 2, 1])
-        with preview_col:
-            st.image(io.BytesIO(preview_img), use_container_width=False, width=400)
-            st.caption(
-                "Latest ligand preview"
-                + (f" · SMILES: `{preview_smiles}`" if preview_smiles else "")
-            )
+        with ligand_preview_slot.container():
+            st.markdown('<div class="ligand-panel">', unsafe_allow_html=True)
+            _, preview_col, _ = st.columns([0.25, 1, 0.25])
+            with preview_col:
+                st.image(io.BytesIO(preview_img), use_container_width=True)
+                st.caption(
+                    "Latest ligand preview"
+                    + (f" · SMILES: `{preview_smiles}`" if preview_smiles else "")
+                )
+            st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.info("Ligand preview will appear here after a valid single-molecule prediction.")
+        ligand_preview_slot.info("Ligand preview will appear here after a valid single-molecule prediction.")
 
     try:
         predictor = get_predictor()
@@ -730,25 +788,45 @@ def render_mechbbb_prediction_page():
                 if result.is_valid:
                     st.success("Valid SMILES")
                     col1, col2, col3 = st.columns(3)
+                    ci_text = "Not available"
+                    if result.prob_std_error is not None:
+                        ci_lower = max(0.0, result.prob - 2 * result.prob_std_error)
+                        ci_upper = min(1.0, result.prob + 2 * result.prob_std_error)
+                        ci_text = f"[{ci_lower:.4f}, {ci_upper:.4f}]"
                     with col1:
-                        # Display P(BBB+) with error range
-                        if result.prob_std_error is not None:
-                            error_pct = result.prob_std_error * 100
-                            # Use 2*SE for ~95% confidence interval
-                            ci_lower = max(0.0, result.prob - 2 * result.prob_std_error)
-                            ci_upper = min(1.0, result.prob + 2 * result.prob_std_error)
-                            st.metric(
-                                "P(BBB+)", 
-                                f"{result.prob:.4f}",
-                                help=f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}]"
-                            )
-                            st.caption(f"± {error_pct:.2f}% (std error)")
-                        else:
-                            st.metric("P(BBB+)", f"{result.prob:.4f}")
+                        st.markdown(
+                            f"""
+                            <div class="result-panel">
+                                <div class="result-title">P(BBB+)</div>
+                                <div class="result-value">{result.prob:.4f}</div>
+                                <div class="result-subtext">95% CI: {ci_text}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                     with col2:
-                        st.metric("Prediction", result.bbb_class)
+                        st.markdown(
+                            f"""
+                            <div class="result-panel">
+                                <div class="result-title">Prediction</div>
+                                <div class="result-value">{result.bbb_class}</div>
+                                <div class="result-subtext">Threshold-adjusted classification</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                     with col3:
-                        st.metric("Threshold", f"{threshold:.2f}")
+                        st.markdown(
+                            f"""
+                            <div class="result-panel">
+                                <div class="result-title">Threshold</div>
+                                <div class="result-value">{threshold:.2f}</div>
+                                <div class="result-subtext">Current decision cutoff</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    st.progress(float(result.prob), text=f"BBB permeability confidence: {result.prob:.1%}")
 
                     # Display confidence interval details
                     if result.prob_std_error is not None:
@@ -772,10 +850,13 @@ def render_mechbbb_prediction_page():
                     mcol1, mcol2, mcol3 = st.columns(3)
                     with mcol1:
                         st.metric("p_efflux", f"{result.p_efflux:.4f}")
+                        st.progress(float(result.p_efflux))
                     with mcol2:
                         st.metric("p_influx", f"{result.p_influx:.4f}")
+                        st.progress(float(result.p_influx))
                     with mcol3:
                         st.metric("p_pampa", f"{result.p_pampa:.4f}")
+                        st.progress(float(result.p_pampa))
 
                     # Applicability domain: ECFP4 Tanimoto similarity to training set
                     train_fps = get_train_fps()
@@ -820,7 +901,15 @@ def render_mechbbb_prediction_page():
                     if img_bytes:
                         st.session_state.last_ligand_image = img_bytes
                         st.session_state.last_ligand_smiles = result.canonical_smiles
-                        st.info("Ligand preview updated above.")
+                        with ligand_preview_slot.container():
+                            st.markdown('<div class="ligand-panel">', unsafe_allow_html=True)
+                            _, preview_col, _ = st.columns([0.25, 1, 0.25])
+                            with preview_col:
+                                st.image(io.BytesIO(img_bytes), use_container_width=True)
+                                st.caption(
+                                    f"Ligand depiction ({source_label}) · SMILES: `{result.canonical_smiles}`"
+                                )
+                            st.markdown("</div>", unsafe_allow_html=True)
                     else:
                         st.warning(
                             "Could not retrieve or draw structure for this molecule."
