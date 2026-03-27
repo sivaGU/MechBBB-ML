@@ -24,7 +24,6 @@ import pandas as pd
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from rdkit.Chem.Draw import rdMolDraw2D
 
 from src.mechbbb.predict import predict_single, predict_batch, load_predictor
 from similarity_module import compute_similarity, similarity_flag, compute_morgan
@@ -205,27 +204,12 @@ def render_ligand_structure(mol, size: int = 400) -> Optional[bytes]:
     """
     if mol is None:
         return None
-    try:
-        draw_size = max(300, int(size))
-        drawer = rdMolDraw2D.MolDraw2DCairo(draw_size, int(draw_size * 0.78))
-        opts = drawer.drawOptions()
-        opts.bondLineWidth = 3.0
-        opts.padding = 0.02
-        opts.baseFontSize = 0.95
-        opts.minFontSize = 14
-        opts.maxFontSize = 30
-        opts.clearBackground = True
-
-        draw_mol = Chem.Mol(mol)
-        if draw_mol.GetNumConformers() > 0:
-            draw_mol.RemoveAllConformers()
-        AllChem.Compute2DCoords(draw_mol)
-
-        rdMolDraw2D.PrepareAndDrawMolecule(drawer, draw_mol)
-        drawer.FinishDrawing()
-        return bytes(drawer.GetDrawingText())
-    except Exception:
-        return None
+    # Streamlit Cloud images rely on system libs (e.g., libXrender) for RDKit
+    # drawing in some environments. Avoid hard dependency here and use
+    # external image fallback in the caller when this returns None.
+    _ = mol
+    _ = size
+    return None
 
 
 # ============================================================================
@@ -264,6 +248,7 @@ st.markdown("""
     .main,
     [data-testid="stAppViewContainer"] > div:not([data-testid="stSidebar"]) {
         background-color: #ffffff !important;
+        padding-right: 0.5rem !important;
     }
     
     div[data-testid="stAppViewContainer"] > div > div:not([data-testid="stSidebar"]) {
@@ -273,41 +258,11 @@ st.markdown("""
     .main .block-container,
     section.main .block-container {
         background-color: #ffffff !important;
-        padding: 1.2rem 1.8rem;
-        margin: 0.8rem auto;
-        max-width: 1400px;
+        padding: 1.2rem 1.1rem 1.2rem 1.1rem;
+        margin: 1rem auto;
+        max-width: 100%;
         border-radius: 8px;
         box-shadow: 0 2px 12px rgba(13, 79, 92, 0.08);
-    }
-    
-    .result-panel {
-        border: 1px solid #d8ebef;
-        border-radius: 10px;
-        padding: 0.75rem 0.9rem;
-        background: linear-gradient(180deg, #ffffff 0%, #f8fdff 100%);
-        margin-bottom: 0.55rem;
-    }
-    
-    .result-title {
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: #1E7A8C;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-        margin-bottom: 0.22rem;
-    }
-    
-    .result-value {
-        font-size: 1.48rem;
-        font-weight: 800;
-        color: #0D4F5C;
-        line-height: 1.12;
-    }
-    
-    .result-subtext {
-        font-size: 0.82rem;
-        color: #4c5f64;
-        margin-top: 0.18rem;
     }
     
     [data-testid="stSidebar"] {
@@ -365,17 +320,6 @@ st.markdown("""
         font-weight: 700;
     }
     
-    /* Slightly tighter section spacing (prediction-style subheaders) */
-    .main h3 {
-        margin-top: 0.65rem !important;
-        margin-bottom: 0.35rem !important;
-    }
-    
-    .main h4 {
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.3rem !important;
-    }
-    
     a {
         color: #1E7A8C;
         text-decoration: none;
@@ -389,25 +333,6 @@ st.markdown("""
     [data-testid="stMetricValue"] {
         color: #1E7A8C;
         font-weight: 600;
-        font-size: 1.42rem !important;
-        line-height: 1.2 !important;
-    }
-    
-    /* Tighten label → value gap in metrics */
-    [data-testid="stMetric"] label p {
-        margin-bottom: 0.1rem !important;
-    }
-    
-    /* Progress bars sit closer to the value above */
-    [data-testid="stProgress"] {
-        margin-top: 0.2rem !important;
-        margin-bottom: 0.35rem !important;
-    }
-    
-    /* Prediction summary info box: slightly less vertical padding */
-    .main [data-baseweb="notification"] {
-        padding-top: 0.55rem !important;
-        padding-bottom: 0.55rem !important;
     }
     
     .stSuccess {
@@ -721,20 +646,18 @@ def render_mechbbb_prediction_page():
         """
     )
     st.subheader("Ligand Structure")
-    ligand_preview_slot = st.empty()
     preview_img = st.session_state.get("last_ligand_image")
     preview_smiles = st.session_state.get("last_ligand_smiles")
     if preview_img:
-        with ligand_preview_slot.container():
-            _, preview_col, _ = st.columns([0.25, 1, 0.25])
-            with preview_col:
-                st.image(io.BytesIO(preview_img), use_container_width=True)
-                st.caption(
-                    "Latest ligand preview"
-                    + (f" · SMILES: `{preview_smiles}`" if preview_smiles else "")
-                )
+        _, preview_col, _ = st.columns([1, 2, 1])
+        with preview_col:
+            st.image(io.BytesIO(preview_img), use_container_width=False, width=300)
+            st.caption(
+                "Latest ligand preview"
+                + (f" · SMILES: `{preview_smiles}`" if preview_smiles else "")
+            )
     else:
-        ligand_preview_slot.info("Ligand preview will appear here after a valid single-molecule prediction.")
+        st.info("Ligand preview will appear here after a valid single-molecule prediction.")
 
     try:
         predictor = get_predictor()
@@ -756,8 +679,6 @@ def render_mechbbb_prediction_page():
     st.sidebar.info(
         "**MechBBB-ML (Model C)** Default threshold 0.35 = MCC-optimal on BBBP validation."
     )
-
-    st.divider()
 
     input_mode = st.radio(
         "Input mode",
@@ -806,47 +727,28 @@ def render_mechbbb_prediction_page():
                     predictor=predictor,
                 )
                 if result.is_valid:
+                    st.markdown("### Results")
                     st.success("Valid SMILES")
                     col1, col2, col3 = st.columns(3)
-                    ci_text = "Not available"
-                    if result.prob_std_error is not None:
-                        ci_lower = max(0.0, result.prob - 2 * result.prob_std_error)
-                        ci_upper = min(1.0, result.prob + 2 * result.prob_std_error)
-                        ci_text = f"[{ci_lower:.4f}, {ci_upper:.4f}]"
                     with col1:
-                        st.markdown(
-                            f"""
-                            <div class="result-panel">
-                                <div class="result-title">P(BBB+)</div>
-                                <div class="result-value">{result.prob:.4f}</div>
-                                <div class="result-subtext">95% CI: {ci_text}</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                        # Display P(BBB+) with error range
+                        if result.prob_std_error is not None:
+                            error_pct = result.prob_std_error * 100
+                            # Use 2*SE for ~95% confidence interval
+                            ci_lower = max(0.0, result.prob - 2 * result.prob_std_error)
+                            ci_upper = min(1.0, result.prob + 2 * result.prob_std_error)
+                            st.metric(
+                                "P(BBB+)", 
+                                f"{result.prob:.4f}",
+                                help=f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}]"
+                            )
+                            st.caption(f"± {error_pct:.2f}% (std error)")
+                        else:
+                            st.metric("P(BBB+)", f"{result.prob:.4f}")
                     with col2:
-                        st.markdown(
-                            f"""
-                            <div class="result-panel">
-                                <div class="result-title">Prediction</div>
-                                <div class="result-value">{result.bbb_class}</div>
-                                <div class="result-subtext">Threshold-adjusted classification</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                        st.metric("Prediction", result.bbb_class)
                     with col3:
-                        st.markdown(
-                            f"""
-                            <div class="result-panel">
-                                <div class="result-title">Threshold</div>
-                                <div class="result-value">{threshold:.2f}</div>
-                                <div class="result-subtext">Current decision cutoff</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                    st.progress(float(result.prob), text=f"BBB permeability confidence: {result.prob:.1%}")
+                        st.metric("Threshold", f"{threshold:.2f}")
 
                     # Display confidence interval details
                     if result.prob_std_error is not None:
@@ -870,13 +772,33 @@ def render_mechbbb_prediction_page():
                     mcol1, mcol2, mcol3 = st.columns(3)
                     with mcol1:
                         st.metric("p_efflux", f"{result.p_efflux:.4f}")
-                        st.progress(float(result.p_efflux))
                     with mcol2:
                         st.metric("p_influx", f"{result.p_influx:.4f}")
-                        st.progress(float(result.p_influx))
                     with mcol3:
                         st.metric("p_pampa", f"{result.p_pampa:.4f}")
-                        st.progress(float(result.p_pampa))
+
+                    st.markdown("#### Visual Summary")
+                    vis_col1, vis_col2 = st.columns(2)
+                    with vis_col1:
+                        st.caption("P(BBB+) confidence gauge")
+                        st.progress(int(max(0, min(100, round(result.prob * 100)))))
+                        if result.prob_std_error is not None:
+                            ci_lower = max(0.0, result.prob - 2 * result.prob_std_error)
+                            ci_upper = min(1.0, result.prob + 2 * result.prob_std_error)
+                            st.caption(f"95% CI: {ci_lower:.3f} to {ci_upper:.3f}")
+                    with vis_col2:
+                        st.caption("Mechanistic probability profile")
+                        mech_df = pd.DataFrame(
+                            {
+                                "Probability": [
+                                    result.p_efflux,
+                                    result.p_influx,
+                                    result.p_pampa,
+                                ]
+                            },
+                            index=["Efflux", "Influx", "PAMPA"],
+                        )
+                        st.bar_chart(mech_df, use_container_width=True, height=220)
 
                     # Applicability domain: ECFP4 Tanimoto similarity to training set
                     train_fps = get_train_fps()
@@ -901,6 +823,8 @@ def render_mechbbb_prediction_page():
                                 )
                         else:
                             st.info("Could not compute fingerprint for similarity analysis.")
+                    else:
+                        st.info("Training fingerprints not available. Similarity analysis disabled.")
 
                     # Ligand structure preview is shown above the input controls.
                     smiles_for_lookup = (result.canonical_smiles or result.smiles or "").strip()
@@ -912,23 +836,14 @@ def render_mechbbb_prediction_page():
                         file_extension=file_ext,
                     )
                     img_bytes = render_ligand_structure(mol) if mol else None
+                    source_label = "RDKit clean depiction"
                     if img_bytes is None and smiles_for_lookup:
                         img_bytes = fetch_structure_image_from_database(smiles_for_lookup)
+                        source_label = "NCI CACTUS fallback"
                     if img_bytes:
                         st.session_state.last_ligand_image = img_bytes
                         st.session_state.last_ligand_smiles = result.canonical_smiles
-                        with ligand_preview_slot.container():
-                            _, preview_col, _ = st.columns([0.25, 1, 0.25])
-                            with preview_col:
-                                st.image(io.BytesIO(img_bytes), use_container_width=True)
-                                st.caption(
-                                    "Latest ligand preview"
-                                    + (
-                                        f" · SMILES: `{result.canonical_smiles}`"
-                                        if result.canonical_smiles
-                                        else ""
-                                    )
-                                )
+                        st.info("Ligand preview updated above.")
                     else:
                         st.warning(
                             "Could not retrieve or draw structure for this molecule."
@@ -1024,9 +939,37 @@ def render_mechbbb_prediction_page():
                                 f"⚠️ **{low_sim_count} molecule(s) have low similarity to training set** "
                                 "(similarity < 0.3). Predictions may be unreliable."
                             )
+                    else:
+                        st.info("Training fingerprints not available. Similarity analysis disabled.")
 
                     st.subheader("Results")
                     st.dataframe(df_out, use_container_width=True)
+
+                    st.markdown("#### Batch Visual Summary")
+                    bcol1, bcol2 = st.columns(2)
+                    with bcol1:
+                        st.caption("Predicted class counts")
+                        class_counts = (
+                            df_out["BBB_class"].astype(str).value_counts().rename("count")
+                        )
+                        st.bar_chart(class_counts, use_container_width=True, height=220)
+                    with bcol2:
+                        st.caption("P(BBB+) distribution")
+                        prob_vals = pd.to_numeric(df_out["prob_BBB+"], errors="coerce").dropna()
+                        if len(prob_vals) > 0:
+                            hist_counts, bin_edges = np.histogram(prob_vals, bins=10, range=(0.0, 1.0))
+                            hist_df = pd.DataFrame(
+                                {
+                                    "bin": [
+                                        f"{bin_edges[i]:.1f}-{bin_edges[i + 1]:.1f}"
+                                        for i in range(len(hist_counts))
+                                    ],
+                                    "count": hist_counts,
+                                }
+                            ).set_index("bin")
+                            st.bar_chart(hist_df, use_container_width=True, height=220)
+                        else:
+                            st.info("No valid probabilities to plot.")
 
                     st.subheader("Download results")
                     st.download_button(
@@ -1040,6 +983,9 @@ def render_mechbbb_prediction_page():
             st.info("Upload a CSV file with a SMILES column to run batch predictions.")
 
     st.divider()
+    st.caption(
+        "MechBBB-ML (Model C). Stage-1: efflux/influx/PAMPA. Stage-2: PhysChem+ECFP+mech."
+    )
 
 
 def render_demo_prediction_page():
