@@ -273,9 +273,9 @@ st.markdown("""
     .main .block-container,
     section.main .block-container {
         background-color: #ffffff !important;
-        padding: 1.2rem 1.8rem;
-        margin: 0.8rem auto;
-        max-width: 1400px;
+        padding: 1.2rem 0.9rem 1.2rem 1.2rem;
+        margin: 0.8rem 0.35rem 0.8rem 0.65rem;
+        max-width: 1500px;
         border-radius: 8px;
         box-shadow: 0 2px 12px rgba(13, 79, 92, 0.08);
     }
@@ -375,6 +375,14 @@ st.markdown("""
         margin-top: 0.5rem !important;
         margin-bottom: 0.3rem !important;
     }
+
+    .section-heading-compact {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1E7A8C;
+        margin-top: 0.4rem;
+        margin-bottom: 0.25rem;
+    }
     
     a {
         color: #1E7A8C;
@@ -402,6 +410,17 @@ st.markdown("""
     [data-testid="stProgress"] {
         margin-top: 0.2rem !important;
         margin-bottom: 0.35rem !important;
+    }
+
+    /* Tighten ligand preview vertical spacing */
+    [data-testid="stImage"] {
+        margin-top: 0.15rem !important;
+        margin-bottom: 0.1rem !important;
+    }
+
+    [data-testid="stCaptionContainer"] {
+        margin-top: 0.05rem !important;
+        margin-bottom: 0.1rem !important;
     }
     
     /* Prediction summary info box: slightly less vertical padding */
@@ -728,7 +747,7 @@ def render_mechbbb_prediction_page():
         with ligand_preview_slot.container():
             _, preview_col, _ = st.columns([0.25, 1, 0.25])
             with preview_col:
-                st.image(io.BytesIO(preview_img), use_container_width=True)
+                st.image(io.BytesIO(preview_img), width=560)
                 st.caption(
                     "Latest ligand preview"
                     + (f" · SMILES: `{preview_smiles}`" if preview_smiles else "")
@@ -850,7 +869,10 @@ def render_mechbbb_prediction_page():
 
                     # Display confidence interval details
                     if result.prob_std_error is not None:
-                        st.markdown("#### Uncertainty Analysis")
+                        st.markdown(
+                            '<div class="section-heading-compact">Uncertainty Analysis</div>',
+                            unsafe_allow_html=True,
+                        )
                         err_col1, err_col2, err_col3 = st.columns(3)
                         with err_col1:
                             error_pct = result.prob_std_error * 100
@@ -866,7 +888,10 @@ def render_mechbbb_prediction_page():
                             f"(95% confidence interval: [{ci_lower:.4f}, {ci_upper:.4f}])"
                         )
 
-                    st.subheader("Mechanistic probabilities")
+                    st.markdown(
+                        '<div class="section-heading-compact">Mechanistic Probabilities</div>',
+                        unsafe_allow_html=True,
+                    )
                     mcol1, mcol2, mcol3 = st.columns(3)
                     with mcol1:
                         st.metric("p_efflux", f"{result.p_efflux:.4f}")
@@ -920,7 +945,7 @@ def render_mechbbb_prediction_page():
                         with ligand_preview_slot.container():
                             _, preview_col, _ = st.columns([0.25, 1, 0.25])
                             with preview_col:
-                                st.image(io.BytesIO(img_bytes), use_container_width=True)
+                                st.image(io.BytesIO(img_bytes), width=560)
                                 st.caption(
                                     "Latest ligand preview"
                                     + (
