@@ -144,72 +144,25 @@ def get_mol_with_3d(smiles: str, file_content: Optional[bytes] = None, file_exte
 
 def fetch_structure_image_from_database(smiles: str, width: int = 400, height: int = 400) -> Optional[bytes]:
     """
-    Fetch a high-quality 2D structure image for the given SMILES.
-    Tries PubChem first for crisp rendering, then falls back to NCI CACTUS.
+    Fetch a 2D structure image for the given SMILES from the NCI CACTUS
+    Chemical Identifier Resolver. Returns PNG image bytes or None on failure.
     """
     if not smiles or not str(smiles).strip():
         return None
-
-    def _enhance_png(png_bytes: bytes) -> bytes:
-        """
-        Improve clarity for bonds and atom labels without smearing text.
-
-        Morphological dilation was removed: it merged letters into blobs/dots.
-        We use contrast + unsharp mask + mild sharpening so strokes look
-        bolder while keeping letters readable.
-        """
-        try:
-            from PIL import Image, ImageEnhance, ImageFilter
-
-            img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
-            img = ImageEnhance.Contrast(img).enhance(1.32)
-            img = ImageEnhance.Color(img).enhance(1.08)
-            # Edge-aware sharpening: clearer lines and glyph edges, not wider blobs
-            try:
-                img = img.filter(
-                    ImageFilter.UnsharpMask(radius=1.2, percent=140, threshold=2)
-                )
-            except Exception:
-                pass
-            img = ImageEnhance.Sharpness(img).enhance(1.18)
-            out = io.BytesIO()
-            img.save(out, format="PNG")
-            return out.getvalue()
-        except Exception:
-            return png_bytes
-
     try:
         encoded = urllib.parse.quote(str(smiles).strip(), safe="")
-
-        # 1) PubChem PUG REST (usually higher-contrast rendering on cloud)
-        pubchem_url = (
-            f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{encoded}/PNG"
-            f"?image_size={width}x{height}"
-        )
-        req = urllib.request.Request(pubchem_url, headers={"User-Agent": "MechBBB-ML-GUI/1.0"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            if resp.status == 200:
-                data = resp.read()
-                if data and len(data) > 100:
-                    return _enhance_png(data)
-    except Exception:
-        pass
-
-    try:
-        # 2) Fallback to CACTUS
-        encoded = urllib.parse.quote(str(smiles).strip(), safe="")
-        cactus_url = (
+        url = (
             f"https://cactus.nci.nih.gov/chemical/structure/{encoded}/image"
             f"?width={width}&height={height}&format=png"
         )
-        req = urllib.request.Request(cactus_url, headers={"User-Agent": "MechBBB-ML-GUI/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "MechBBB-ML-GUI/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status != 200:
                 return None
             data = resp.read()
             if not data or len(data) < 100:
                 return None
-            return _enhance_png(data)
+            return data
     except Exception:
         return None
 
@@ -295,7 +248,6 @@ st.markdown("""
     .main,
     [data-testid="stAppViewContainer"] > div:not([data-testid="stSidebar"]) {
         background-color: #ffffff !important;
-        padding-right: 0.5rem !important;
     }
     
     div[data-testid="stAppViewContainer"] > div > div:not([data-testid="stSidebar"]) {
@@ -305,21 +257,11 @@ st.markdown("""
     .main .block-container,
     section.main .block-container {
         background-color: #ffffff !important;
-        padding: 0.6rem 0.9rem 0.8rem 0.9rem;
-        margin: 0.4rem auto;
-        max-width: 100%;
+        padding: 2rem 3rem;
+        margin: 2rem auto;
+        max-width: 1400px;
         border-radius: 8px;
         box-shadow: 0 2px 12px rgba(13, 79, 92, 0.08);
-    }
-
-    /* Reduce vertical whitespace between stacked Streamlit blocks */
-    [data-testid="stVerticalBlock"] {
-        gap: 0.35rem;
-    }
-
-    .stDivider {
-        margin-top: 0.35rem;
-        margin-bottom: 0.45rem;
     }
     
     [data-testid="stSidebar"] {
@@ -375,8 +317,6 @@ st.markdown("""
     h1, h2, h3 {
         color: #1E7A8C;
         font-weight: 700;
-        margin-top: 0.2rem;
-        margin-bottom: 0.35rem;
     }
     
     a {
@@ -392,16 +332,6 @@ st.markdown("""
     [data-testid="stMetricValue"] {
         color: #1E7A8C;
         font-weight: 600;
-        font-size: 1.25rem;
-        line-height: 1.15;
-    }
-
-    [data-testid="stMetricLabel"] {
-        font-size: 0.82rem;
-    }
-
-    [data-testid="stMetricDelta"] {
-        font-size: 0.75rem;
     }
     
     .stSuccess {
@@ -714,22 +644,6 @@ def render_mechbbb_prediction_page():
         **Input modes:** Single SMILES or structure file | Batch (CSV with smiles/SMILES column)
         """
     )
-    st.subheader("Ligand Structure")
-    preview_img = st.session_state.get("last_ligand_image")
-    preview_smiles = st.session_state.get("last_ligand_smiles")
-    preview_slot = st.container()
-    if preview_img:
-        with preview_slot:
-            _, preview_col, _ = st.columns([1, 3, 1])
-            with preview_col:
-                st.image(io.BytesIO(preview_img), use_container_width=False, width=520)
-                st.caption(
-                    "Latest ligand preview"
-                    + (f" · SMILES: `{preview_smiles}`" if preview_smiles else "")
-                )
-    else:
-        preview_slot.info("Ligand preview will appear here after a valid single-molecule prediction.")
-
     try:
         predictor = get_predictor()
     except Exception as e:
@@ -750,6 +664,8 @@ def render_mechbbb_prediction_page():
     st.sidebar.info(
         "**MechBBB-ML (Model C)** Default threshold 0.35 = MCC-optimal on BBBP validation."
     )
+
+    st.divider()
 
     input_mode = st.radio(
         "Input mode",
@@ -798,7 +714,6 @@ def render_mechbbb_prediction_page():
                     predictor=predictor,
                 )
                 if result.is_valid:
-                    st.markdown("### Results")
                     st.success("Valid SMILES")
                     col1, col2, col3 = st.columns(3)
                     with col1:
@@ -874,7 +789,8 @@ def render_mechbbb_prediction_page():
                     else:
                         st.info("Training fingerprints not available. Similarity analysis disabled.")
 
-                    # Ligand structure preview is shown above the input controls.
+                    # Ligand structure
+                    st.subheader("Ligand Structure")
                     smiles_for_lookup = (result.canonical_smiles or result.smiles or "").strip()
                     file_content = st.session_state.get("structure_file_content")
                     file_ext = st.session_state.get("structure_file_ext")
@@ -884,21 +800,15 @@ def render_mechbbb_prediction_page():
                         file_extension=file_ext,
                     )
                     img_bytes = render_ligand_structure(mol) if mol else None
+                    source_label = "RDKit clean depiction"
                     if img_bytes is None and smiles_for_lookup:
-                        img_bytes = fetch_structure_image_from_database(
-                            smiles_for_lookup, width=1200, height=900
-                        )
+                        img_bytes = fetch_structure_image_from_database(smiles_for_lookup)
+                        source_label = "NCI CACTUS fallback"
                     if img_bytes:
                         st.session_state.last_ligand_image = img_bytes
                         st.session_state.last_ligand_smiles = result.canonical_smiles
-                        with preview_slot:
-                            _, preview_col, _ = st.columns([1, 3, 1])
-                            with preview_col:
-                                st.image(io.BytesIO(img_bytes), use_container_width=False, width=520)
-                                st.caption(
-                                    "Latest ligand preview"
-                                    + (f" · SMILES: `{result.canonical_smiles}`" if result.canonical_smiles else "")
-                                )
+                        st.image(io.BytesIO(img_bytes), use_container_width=False, width=400)
+                        st.caption(f"2D structure · {source_label}")
                     else:
                         st.warning(
                             "Could not retrieve or draw structure for this molecule."
